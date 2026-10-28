@@ -1,5 +1,8 @@
 package com.company.ems;
 
+import java.io.InputStream;
+import java.util.Properties;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,9 +11,19 @@ import java.util.List;
 public class EmployeeJdbcDAO {
 
     // CHANGE username/password to match hibernate.cfg.xml
-    private static final String URL  = "jdbc:mysql://localhost:3306/employee_db?useSSL=false&allowPublicKeyRetrieval=true";
-    private static final String USER = "root";
-    private static final String PASS = "Meka@6154";
+	private static String URL, USER, PASS;
+
+	static {
+	    try (InputStream in = EmployeeJdbcDAO.class.getResourceAsStream("/db.properties")) {
+	        Properties p = new Properties();
+	        p.load(in);
+	        URL = p.getProperty("db.url");
+	        USER = p.getProperty("db.username");
+	        PASS = p.getProperty("db.password");
+	    } catch (Exception e) {
+	        throw new RuntimeException("Cannot read db.properties", e);
+	    }
+	}
 
     private Connection getConnection() throws SQLException {
         return DriverManager.getConnection(URL, USER, PASS);
