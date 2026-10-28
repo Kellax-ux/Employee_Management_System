@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Employee Management System</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f2f4f8; margin:0; padding:20px; }
+    .box { max-width:900px; margin:auto; background:white; padding:20px; border-radius:8px; box-shadow:0 2px 6px #ccc; }
+    h1 { text-align:center; color:#2c3e50; }
+    input { padding:8px; margin:4px; }
+    button { padding:8px 14px; border:none; border-radius:4px; background:#3498db; color:white; cursor:pointer; }
+    button.red { background:#e74c3c; }
+    button.green { background:#27ae60; }
+    table { width:100%; border-collapse:collapse; margin-top:15px; }
+    th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+    th { background:#2c3e50; color:white; }
+    #stats { text-align:center; margin:10px; font-weight:bold; color:#16a085; }
+    #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+.toast { min-width: 250px; margin-bottom: 10px; padding: 12px 18px; border-radius: 6px;
+         color: white; font-size: 14px; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+         opacity: 0; transition: opacity 0.4s; }
+.toast.show { opacity: 1; }
+.toast.success { background: #27ae60; }
+.toast.error { background: #e74c3c; }
+.toast.info { background: #3498db; }
+  </style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div class="box">
+  <h1>Employee Management System</h1>
+  <div id="stats"></div>
+
+  <!-- Form -->
+  <input type="hidden" id="id">
+  <input id="name" placeholder="Name">
+  <input id="email" placeholder="Email">
+  <input id="department" placeholder="Department">
+  <input id="salary" type="number" placeholder="Salary">
+  <button onclick="saveEmployee()">Save</button>
+  <button class="green" onclick="clearForm()">Clear</button>
+
+  <!-- Search (uses JDBC on the server) -->
+  <div style="margin-top:15px">
+    <input id="searchBox" placeholder="Search by name">
+    <button onclick="searchEmployee()">Search</button>
+    <button onclick="loadEmployees()">Show All</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Name</th><th>Email</th><th>Department</th><th>Salary</th><th>Action</th></tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<script>
+  // Show rows in the table
+  // Toast notification (type: "success", "error" or "info")
+function showToast(message, type) {
+  var box = document.getElementById("toast-container");
+  var t = document.createElement("div");
+  t.className = "toast " + (type || "info");
+  t.innerText = message;
+  box.appendChild(t);
+  setTimeout(function () { t.classList.add("show"); }, 50);
+  setTimeout(function () {
+    t.classList.remove("show");
+    setTimeout(function () { box.removeChild(t); }, 400);
+  }, 3000);
+}
+  function showTable(list) {
+    var rows = "";
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i];
+      rows += "<tr>" +
+        "<td>" + e.id + "</td><td>" + e.name + "</td><td>" + e.email + "</td>" +
+        "<td>" + e.department + "</td><td>" + e.salary + "</td>" +
+        "<td><button onclick='editEmployee(" + JSON.stringify(e) + ")'>Edit</button> " +
+        "<button class='red' onclick='deleteEmployee(" + e.id + ")'>Delete</button></td></tr>";
+    }
+    document.getElementById("tableBody").innerHTML = rows;
+  }
+
+  // GET all employees (Hibernate)
+  function loadEmployees() {
+    fetch("/api/employees").then(r => r.json()).then(showTable);
+    loadStats();
+  }
+
+  // GET stats (JDBC)
+  function loadStats() {
+    fetch("/api/stats").then(r => r.json()).then(s => {
+      document.getElementById("stats").innerText =
+        "Total Employees: " + s.total + "   |   Average Salary: " + s.averageSalary;
+    });
+  }
+
+  // POST (add) or PUT (update)
+  function saveEmployee() {
+  var id = document.getElementById("id").value;
+  var name = document.getElementById("name").value.trim();
+  var email = document.getElementById("email").value.trim();
+  var department = document.getElementById("department").value.trim();
+  var salaryText = document.getElementById("salary").value;
+
+  if (name === "") { showToast("Name is required", "error"); return; }
+  if (!/^[A-Za-z ]{2,50}$/.test(name)) {
+    showToast("Name must contain only letters and spaces (2 to 50 characters)", "error"); return;
+  }
+  if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(email)) {
+    showToast("Please enter a valid Gmail address", "error"); return;
+  }
+  if (department === "") { showToast("Department is required", "error"); return; }
+  if (salaryText === "" || parseFloat(salaryText) <= 0) {
+    showToast("Salary must be greater than 0", "error"); return;
+  }
+
+  var emp = { name: name, email: email, department: department, salary: parseFloat(salaryText) };
+  var url = id ? "/api/employees/" + id : "/api/employees";
+  var method = id ? "PUT" : "POST";
+
+  fetch(url, { method: method, body: JSON.stringify(emp) })
+    .then(function (r) {
+      return r.json().then(function (data) {
+        if (!r.ok) { showToast(data.message, "error"); return; }
+        showToast(data.message, "success");     // "Employee added" / "Employee updated"
+        clearForm();
+        loadEmployees();
+      });
+    });
+}
+
+  // Fill the form for editing
+  function editEmployee(e) {
+    document.getElementById("id").value = e.id;
+    document.getElementById("name").value = e.name;
+    document.getElementById("email").value = e.email;
+    document.getElementById("department").value = e.department;
+    document.getElementById("salary").value = e.salary;
+  }
+
+  // DELETE
+  function deleteEmployee(id) {
+  if (confirm("Delete this employee?")) {
+    fetch("/api/employees/" + id, { method: "DELETE" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        showToast(data.message, "success");     // "Employee deleted"
+        loadEmployees();
+      });
+  }
+}
+
+  // Search (JDBC)
+  function searchEmployee() {
+    var name = document.getElementById("searchBox").value;
+    fetch("/api/search?name=" + encodeURIComponent(name)).then(r => r.json()).then(showTable);
+  }
+
+  function clearForm() {
+    ["id", "name", "email", "department", "salary"].forEach(f => document.getElementById(f).value = "");
+  }
+
+  loadEmployees();   // run when the page opens
+</script>
+</body>
+</html>
